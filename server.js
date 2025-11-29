@@ -4,7 +4,7 @@ const cors = require("cors");
 const axios = require("axios");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // CWA API 設定
 const CWA_API_BASE_URL = "https://opendata.cwa.gov.tw/api";
@@ -141,6 +141,7 @@ app.get("/", (req, res) => {
     message: "歡迎使用 CWA 天氣預報 API",
     endpoints: {
       weather: "/api/weather?locationName=臺北市",
+      earthquake: "/api/earthquake",
       health: "/api/health",
     },
   });
@@ -152,6 +153,66 @@ app.get("/api/health", (req, res) => {
 
 // 取得天氣預報
 app.get("/api/weather", getWeather);
+
+/**
+ * 取得地震報告
+ * CWA 氣象資料開放平臺 API
+ * 使用「顯著有感地震報告」資料集 (E-A0015-001)
+ */
+const getEarthquake = async (req, res) => {
+  try {
+    // 檢查是否有設定 API Key
+    if (!CWA_API_KEY) {
+      return res.status(500).json({
+        error: "伺服器設定錯誤",
+        message: "請設定 CWA_API_KEY",
+      });
+    }
+
+    // 呼叫 CWA API - 顯著有感地震報告
+    const response = await axios.get(
+      `${CWA_API_BASE_URL}/v1/rest/datastore/E-A0015-001`,
+      {
+        params: {
+          Authorization: CWA_API_KEY,
+          AreaName: "",
+        },
+      }
+    );
+
+    const earthquakeData = response.data.records.Earthquake;
+
+    if (!earthquakeData) {
+      return res.status(404).json({
+        error: "查無資料",
+        message: "無法取得地震資料",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: earthquakeData,
+    });
+  } catch (error) {
+    console.error("取得地震資料失敗:", error.message);
+
+    if (error.response) {
+      return res.status(error.response.status).json({
+        error: "CWA API 錯誤",
+        message: error.response.data.message || "無法取得地震資料",
+        details: error.response.data,
+      });
+    }
+
+    res.status(500).json({
+      error: "伺服器錯誤",
+      message: "無法取得地震資料，請稍後再試",
+    });
+  }
+};
+
+// 取得地震報告
+app.get("/api/earthquake", getEarthquake);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
